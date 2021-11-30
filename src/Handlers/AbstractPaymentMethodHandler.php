@@ -316,7 +316,7 @@ abstract class AbstractPaymentMethodHandler
         }
 
         // Payment had no error, continue the process
-        return new RedirectResponse($this->getAdyenReturnUrl($transaction));
+        return new RedirectResponse($this->getAdyenReturnUrl($transaction, $salesChannelContext));
     }
 
     /**
@@ -485,7 +485,7 @@ abstract class AbstractPaymentMethodHandler
 
         if (empty($request['paymentMethod']['personalDetails']['dateOfBirth'])) {
             if ($salesChannelContext->getCustomer()->getBirthday()) {
-                $shopperDob = $salesChannelContext->getCustomer()->getBirthday()->format('Y-m-d');
+                $shopperDob = $salesChannelContext->getCustomer()->getBirthday()->format('d-m-Y');
             } else {
                 $shopperDob = '';
             }
@@ -554,7 +554,7 @@ abstract class AbstractPaymentMethodHandler
             ),
             $transaction->getOrder()->getOrderNumber(),
             $this->configurationService->getMerchantAccount($salesChannelContext->getSalesChannel()->getId()),
-            $this->getAdyenReturnUrl($transaction),
+            $this->getAdyenReturnUrl($transaction, $salesChannelContext),
             $request
         );
 
@@ -642,7 +642,7 @@ abstract class AbstractPaymentMethodHandler
      * @return string
      * @throws AsyncPaymentProcessException
      */
-    private function getAdyenReturnUrl(AsyncPaymentTransactionStruct $transaction): string
+    private function getAdyenReturnUrl(AsyncPaymentTransactionStruct $transaction, SalesChannelContext $salesChannelContext): string
     {
         // Parse the original return URL to retrieve the query parameters
         $returnUrlQuery = parse_url($transaction->getReturnUrl(), PHP_URL_QUERY);
@@ -656,18 +656,20 @@ abstract class AbstractPaymentMethodHandler
         }
 
         // Generate the custom Adyen endpoint to receive the redirect from the issuer page
-        $adyenReturnUrl = $this->router->generate(
+        $adyenReturnPath = $this->router->generate(
             'payment.adyen.redirect_result',
             [
                 RedirectResultController::CSRF_TOKEN => $this->csrfTokenManager->getToken(
                     'payment.finalize.transaction'
                 )->getValue()
             ],
-            RouterInterface::ABSOLUTE_URL
+            RouterInterface::ABSOLUTE_PATH
         );
 
+        $currentSalesChannelDomain = $salesChannelContext->getSalesChannel()->getDomains()->get($salesChannelContext->getDomainId());
+
         // Create the adyen redirect result URL with the same query as the original return URL
-        return $adyenReturnUrl . '&' . $returnUrlQuery;
+        return $currentSalesChannelDomain->getUrl() . $adyenReturnPath . '&' . $returnUrlQuery;
     }
 
     /**
